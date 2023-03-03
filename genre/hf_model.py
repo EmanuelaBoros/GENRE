@@ -71,11 +71,14 @@ class _GENREHubInterface:
     def encode(self, sentence):
         return self.tokenizer.encode(sentence, return_tensors="pt")[0]
 
+
 class GENREHubInterface(_GENREHubInterface, BartForConditionalGeneration):
     pass
-    
+
+
 class mGENREHubInterface(_GENREHubInterface, MBartForConditionalGeneration):
     pass
+
 
 class GENRE(BartForConditionalGeneration):
     @classmethod
