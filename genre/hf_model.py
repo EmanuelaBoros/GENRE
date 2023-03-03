@@ -51,7 +51,7 @@ class _GENREHubInterface:
 
         outputs = chunk_it(
             [
-                {"text": text, "score": score,}
+                {"text": text, "score": score, }
                 for text, score in zip(
                     self.tokenizer.batch_decode(
                         outputs.sequences, skip_special_tokens=True
@@ -92,5 +92,6 @@ class mGENRE(MBartForConditionalGeneration):
     @classmethod
     def from_pretrained(cls, model_name_or_path):
         model = mGENREHubInterface.from_pretrained(model_name_or_path)
-        model.tokenizer = XLMRobertaTokenizer.from_pretrained(model_name_or_path)
+        model.tokenizer = XLMRobertaTokenizer.from_pretrained(
+            model_name_or_path)
         return model

@@ -35,8 +35,10 @@ class Trie(object):
 
     def get(self, prefix_sequence: List[int]):
         return Trie._get_from_trie(
-            prefix_sequence, self.trie_dict, self.append_trie, self.bos_token_id
-        )
+            prefix_sequence,
+            self.trie_dict,
+            self.append_trie,
+            self.bos_token_id)
 
     @staticmethod
     def load_from_dict(trie_dict):

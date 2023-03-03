@@ -22,7 +22,8 @@ from genre.entity_linking import (
 def chunk_it(seq, num):
     assert num > 0
     chunk_len = len(seq) // num
-    chunks = [seq[i * chunk_len : i * chunk_len + chunk_len] for i in range(num)]
+    chunks = [seq[i * chunk_len: i * chunk_len + chunk_len]
+              for i in range(num)]
 
     diff = len(seq) - chunk_len * num
     for i in range(diff):
@@ -57,31 +58,29 @@ def create_input(doc, max_length, start_delimiter, end_delimiter):
             )
         elif len(doc["meta"]["left_context"].split(" ")) <= max_length // 2:
             input_ = (
-                doc["meta"]["left_context"]
-                + " {} ".format(start_delimiter)
-                + doc["meta"]["mention"]
-                + " {} ".format(end_delimiter)
-                + " ".join(
+                doc["meta"]["left_context"] +
+                " {} ".format(start_delimiter) +
+                doc["meta"]["mention"] +
+                " {} ".format(end_delimiter) +
+                " ".join(
                     doc["meta"]["right_context"].split(" ")[
-                        : max_length - len(doc["meta"]["left_context"].split(" "))
-                    ]
-                )
-            )
+                        : max_length -
+                        len(
+                            doc["meta"]["left_context"].split(" "))]))
         elif len(doc["meta"]["right_context"].split(" ")) <= max_length // 2:
             input_ = (
                 " ".join(
                     doc["meta"]["left_context"].split(" ")[
-                        len(doc["meta"]["right_context"].split(" ")) - max_length :
-                    ]
-                )
-                + " {} ".format(start_delimiter)
-                + doc["meta"]["mention"]
-                + " {} ".format(end_delimiter)
-                + doc["meta"]["right_context"]
-            )
+                        len(
+                            doc["meta"]["right_context"].split(" ")) -
+                        max_length:]) +
+                " {} ".format(start_delimiter) +
+                doc["meta"]["mention"] +
+                " {} ".format(end_delimiter) +
+                doc["meta"]["right_context"])
         else:
             input_ = (
-                " ".join(doc["meta"]["left_context"].split(" ")[-max_length // 2 :])
+                " ".join(doc["meta"]["left_context"].split(" ")[-max_length // 2:])
                 + " {} ".format(start_delimiter)
                 + doc["meta"]["mention"]
                 + " {} ".format(end_delimiter)
@@ -120,7 +119,8 @@ def get_entity_spans_post_processing(sentences):
         sent = re.sub(r"\. \. \} \[ (.*?) \]", r". } [ \1 ] .", sent)
         sent = re.sub(r"\, \} \[ (.*?) \]", r" } [ \1 ] ,", sent)
         sent = re.sub(r"\; \} \[ (.*?) \]", r" } [ \1 ] ;", sent)
-        sent = sent.replace("{ ", "{").replace(" } [ ", "}[").replace(" ]", "]")
+        sent = sent.replace(
+            "{ ", "{").replace(" } [ ", "}[").replace(" ]", "]")
         outputs.append(sent)
 
     return outputs
@@ -187,7 +187,10 @@ def get_entity_spans_hf(
     )
 
 
-def get_entity_spans_finalize(input_sentences, output_sentences, redirections=None):
+def get_entity_spans_finalize(
+        input_sentences,
+        output_sentences,
+        redirections=None):
 
     return_outputs = []
     for input_, output_ in zip(input_sentences, output_sentences):
@@ -268,7 +271,7 @@ def get_markdown(sentences, entity_spans):
         for begin, length, href in entities:
             text += sent[last_end:begin]
             text += "[{}](https://en.wikipedia.org/wiki/{})".format(
-                sent[begin : begin + length], href
+                sent[begin: begin + length], href
             )
             last_end = begin + length
 
@@ -338,9 +341,8 @@ def get_micro_recall(guess_entities, gold_entities, mode="strong"):
 def get_micro_f1(guess_entities, gold_entities, mode="strong"):
     precision = get_micro_precision(guess_entities, gold_entities, mode)
     recall = get_micro_recall(guess_entities, gold_entities, mode)
-    return (
-        (2 * (precision * recall) / (precision + recall)) if precision + recall else 0
-    )
+    return ((2 * (precision * recall) / (precision + recall))
+            if precision + recall else 0)
 
 
 def get_doc_level_guess_gold_entities(guess_entities, gold_entities):
@@ -382,8 +384,10 @@ def get_macro_f1(guess_entities, gold_entities, mode="strong"):
         guess_entities, gold_entities
     )
     all_scores = [
-        get_micro_f1(guess_entities[k], gold_entities[k], mode) for k in guess_entities
-    ]
+        get_micro_f1(
+            guess_entities[k],
+            gold_entities[k],
+            mode) for k in guess_entities]
     return (sum(all_scores) / len(all_scores)) if len(all_scores) else 0
 
 
@@ -400,8 +404,7 @@ def extract_pages(filename):
             # CASE 2: end of the document
             elif line.startswith("</doc>"):
                 assert doc["id"] not in docs, "{} ({}) already in dict as {}".format(
-                    doc["id"], doc["title"], docs[doc["id"]]["title"]
-                )
+                    doc["id"], doc["title"], docs[doc["id"]]["title"])
                 docs[doc["id"]] = doc
 
             # CASE 3: in the document
@@ -409,7 +412,7 @@ def extract_pages(filename):
                 doc["paragraphs"].append("")
                 try:
                     line = BeautifulSoup(line, "html.parser")
-                except:
+                except BaseException:
                     print("error line `{}`".format(line))
                     line = [line]
 
@@ -466,7 +469,11 @@ def search_wikidata(query, label_alias2wikidataID):
 
 
 def get_wikidata_ids(
-    anchor, lang, lang_title2wikidataID, lang_redirect2title, label_or_alias2wikidataID,
+    anchor,
+    lang,
+    lang_title2wikidataID,
+    lang_redirect2title,
+    label_or_alias2wikidataID,
 ):
     success, result = search_simple(anchor, lang, label_or_alias2wikidataID)
     if success:
@@ -478,7 +485,8 @@ def get_wikidata_ids(
         if success:
             return result, "wikipedia"
         else:
-            return search_wikidata(result, label_or_alias2wikidataID), "wikidata"
+            return search_wikidata(
+                result, label_or_alias2wikidataID), "wikidata"
 
 
 def post_process_wikidata(outputs, text_to_id=False, marginalize=False,
@@ -491,7 +499,9 @@ def post_process_wikidata(outputs, text_to_id=False, marginalize=False,
         ]
 
         if marginalize:
-            for (i, hypos), hypos_tok in zip(enumerate(outputs), batched_hypos):
+            for (
+                    i, hypos), hypos_tok in zip(
+                    enumerate(outputs), batched_hypos):
                 outputs_dict = defaultdict(list)
                 for hypo, hypo_tok in zip(hypos, hypos_tok):
                     outputs_dict[hypo["id"]].append(
@@ -522,7 +532,19 @@ def post_process_wikidata(outputs, text_to_id=False, marginalize=False,
     return outputs
 
 
-tr2016_langs = ["ar", "de", "es", "fr", "he", "it", "ta", "th", "tl", "tr", "ur", "zh"]
+tr2016_langs = [
+    "ar",
+    "de",
+    "es",
+    "fr",
+    "he",
+    "it",
+    "ta",
+    "th",
+    "tl",
+    "tr",
+    "ur",
+    "zh"]
 
 news_langs = [
     "ar",

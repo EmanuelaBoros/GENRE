@@ -207,7 +207,7 @@ def _get_end_to_end_prefix_allowed_tokens_fn(
 
         pointer_start, _ = get_pointer_mention(sent)
         if pointer_start + 1 < len(sent):
-            ment_next = mention_trie.get(sent[pointer_start + 1 :])
+            ment_next = mention_trie.get(sent[pointer_start + 1:])
         else:
             ment_next = mention_trie.get([])
 
@@ -217,7 +217,9 @@ def _get_end_to_end_prefix_allowed_tokens_fn(
             if sent_orig[pointer_end] != codes["EOS"]:
                 if sent_orig[pointer_end] in ment_next:
                     if codes["EOS"] in ment_next:
-                        return [sent_orig[pointer_end], codes["end_mention_token"]]
+                        return [
+                            sent_orig[pointer_end],
+                            codes["end_mention_token"]]
                     else:
                         return [sent_orig[pointer_end]]
                 elif codes["EOS"] in ment_next:
@@ -243,7 +245,7 @@ def _get_end_to_end_prefix_allowed_tokens_fn(
         pointer_start, pointer_end = get_pointer_mention(sent)
 
         if pointer_start + 1 != pointer_end:
-            mention = decode_fn(sent[pointer_start + 1 : pointer_end]).strip()
+            mention = decode_fn(sent[pointer_start + 1: pointer_end]).strip()
 
             if candidates_trie is not None:
                 candidates_trie_tmp = candidates_trie

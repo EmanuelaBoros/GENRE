@@ -30,7 +30,11 @@ class _GENREHubInterface:
         **kwargs,
     ) -> List[str]:
         if isinstance(sentences, str):
-            return self.sample([sentences], beam=beam, verbose=verbose, **kwargs)[0]
+            return self.sample(
+                [sentences],
+                beam=beam,
+                verbose=verbose,
+                **kwargs)[0]
         tokenized_sentences = [self.encode(sentence) for sentence in sentences]
 
         batched_hypos = self.generate(
@@ -51,9 +55,11 @@ class _GENREHubInterface:
         ]
 
         outputs = post_process_wikidata(
-            outputs, text_to_id=text_to_id, marginalize=marginalize, batched_hypos=batched_hypos,
-            marginalize_lenpen=marginalize_lenpen
-        )
+            outputs,
+            text_to_id=text_to_id,
+            marginalize=marginalize,
+            batched_hypos=batched_hypos,
+            marginalize_lenpen=marginalize_lenpen)
 
         return outputs
 
@@ -72,11 +78,14 @@ class _GENREHubInterface:
         else:
             return tokens
 
+
 class GENREHubInterface(_GENREHubInterface, BARTHubInterface):
     pass
-    
+
+
 class mGENREHubInterface(_GENREHubInterface, BARTHubInterface):
     pass
+
 
 class GENRE(BARTModel):
     @classmethod
@@ -101,6 +110,7 @@ class GENRE(BARTModel):
         )
         return GENREHubInterface(x["args"], x["task"], x["models"][0])
 
+
 class mGENRE(BARTModel):
     @classmethod
     def from_pretrained(
@@ -122,7 +132,9 @@ class mGENRE(BARTModel):
             archive_map=cls.hub_models(),
             bpe=bpe,
             load_checkpoint_heads=True,
-            sentencepiece_model=os.path.join(model_name_or_path, sentencepiece_model),
+            sentencepiece_model=os.path.join(
+                model_name_or_path,
+                sentencepiece_model),
             **kwargs,
         )
         return mGENREHubInterface(x["args"], x["task"], x["models"][0])
