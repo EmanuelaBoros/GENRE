@@ -10,7 +10,7 @@ import os
 import pickle
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from mgenre.utils import chunk_it, extract_pages
+from utils import chunk_it, extract_pages
 from tqdm.auto import tqdm, trange
 
 if __name__ == "__main__":

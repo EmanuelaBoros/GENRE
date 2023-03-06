@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import pickle
+import bz2
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import unquote
@@ -79,16 +80,16 @@ if __name__ == "__main__":
 
     if args.step == "compress":
         wikidata = 0
-        with open(
-            os.path.join(args.base_wikidata, "wikidata-all.json"), "r"
-        ) as fi, jsonlines.open(
-            os.path.join(args.base_wikidata, "wikidata-all-compressed.jsonl"), "w"
+        # open(os.path.join(args.base_wikidata, "wikidata-all.json"), "r") as fi,
+
+        with bz2.open(os.path.join(args.base_wikidata, "latest-all.json.gz"), "rt") as fi, jsonlines.open(
+                os.path.join(args.base_wikidata, "wikidata-all-compressed.jsonl"), "w"
         ) as fo:
 
             iter_ = tqdm(fi)
             for i, line in enumerate(iter_):
                 iter_.set_postfix(wikidata=wikidata, refresh=False)
-
+                # json_obj = json.loads(line.strip().strip(","))
                 line = line.strip()
                 if line[-1] == ",":
                     line = line[:-1]
@@ -134,43 +135,43 @@ if __name__ == "__main__":
                     fo.write(line)
                     wikidata += 1
 
-    elif args.step == "normalize":
-
-        mgenre = mGENRE.from_pretrained(
-            "models/mbart.cc100",
-            checkpoint_file="model.pt",
-            bpe="sentencepiece",
-            layernorm_embedding=True,
-            sentencepiece_model="models/spm_256000.model",
-        ).eval()
-
-        with jsonlines.open(
-            os.path.join(args.base_wikidata, "wikidata-all-compressed.jsonl"), "r"
-        ) as fi, jsonlines.open(
-            os.path.join(
-                args.base_wikidata, "wikidata-all-compressed-normalized.jsonl"
-            ),
-            "w",
-        ) as fo:
-
-            for item in tqdm(fi):
-                item["sitelinks"] = {
-                    lang: mgenre.decode(mgenre.encode(title))
-                    for lang, title in item["sitelinks"].items()
-                }
-                item["labels"] = {
-                    lang: mgenre.decode(mgenre.encode(label))
-                    for lang, label in item["labels"].items()
-                }
-                item["descriptions"] = {
-                    lang: mgenre.decode(mgenre.encode(desc))
-                    for lang, desc in item["descriptions"].items()
-                }
-                item["aliases"] = {
-                    lang: [mgenre.decode(mgenre.encode(alias)) for alias in aliases]
-                    for lang, aliases in item["aliases"].items()
-                }
-                fo.write(item)
+    # elif args.step == "normalize":
+    #
+    #     mgenre = mGENRE.from_pretrained(
+    #         "models/mbart.cc100",
+    #         checkpoint_file="model.pt",
+    #         bpe="sentencepiece",
+    #         layernorm_embedding=True,
+    #         sentencepiece_model="models/spm_256000.model",
+    #     ).eval()
+    #
+    #     with jsonlines.open(
+    #         os.path.join(args.base_wikidata, "wikidata-all-compressed.jsonl"), "r"
+    #     ) as fi, jsonlines.open(
+    #         os.path.join(
+    #             args.base_wikidata, "wikidata-all-compressed-normalized.jsonl"
+    #         ),
+    #         "w",
+    #     ) as fo:
+    #
+    #         for item in tqdm(fi):
+    #             item["sitelinks"] = {
+    #                 lang: mgenre.decode(mgenre.encode(title))
+    #                 for lang, title in item["sitelinks"].items()
+    #             }
+    #             item["labels"] = {
+    #                 lang: mgenre.decode(mgenre.encode(label))
+    #                 for lang, label in item["labels"].items()
+    #             }
+    #             item["descriptions"] = {
+    #                 lang: mgenre.decode(mgenre.encode(desc))
+    #                 for lang, desc in item["descriptions"].items()
+    #             }
+    #             item["aliases"] = {
+    #                 lang: [mgenre.decode(mgenre.encode(alias)) for alias in aliases]
+    #                 for lang, aliases in item["aliases"].items()
+    #             }
+    #             fo.write(item)
 
     elif args.step == "dicts":
 
@@ -250,82 +251,82 @@ if __name__ == "__main__":
             with open(filename, "wb") as f:
                 pickle.dump(dict(data), f)
 
-    elif args.step == "redirects":
-
-        lang_redirect2title = {}
-        for lang in set(wiki_langs).intersection(set(mbart100_langs)):
-            with open(
-                "wikipedia_redirect/target/{}wiki-redirects.txt".format(lang)
-            ) as f:
-                for row in tqdm(csv.reader(f, delimiter="\t"), desc=lang):
-                    title = unquote(row[1]).split("#")[0].replace("_", " ")
-                    if title:
-                        title = title[0].upper() + title[1:]
-                        assert (lang, row[0]) not in lang_redirect2title
-                        lang_redirect2title[(lang, row[0])] = title
-
-        filename = os.path.join(args.base_wikidata, "lang_redirect2title.pkl")
-        logging.info("Saving {}".format(filename))
-        with open(filename, "wb") as f:
-            pickle.dump(lang_redirect2title, f)
-
-    elif args.step == "freebase":
-
-        wikidataID2freebaseID = defaultdict(list)
-        freebaseID2wikidataID = defaultdict(list)
-
-        with open(os.path.join(args.base_wikidata, "wikidata-all.json"), "r") as fi:
-
-            iter_ = tqdm(fi)
-            for i, line in enumerate(iter_):
-                line = line.strip()
-                if line[-1] == ",":
-                    line = line[:-1]
-
-                if line == "[" or line == "]":
-                    continue
-
-                line = json.loads(line)
-
-                if line["type"] == "item":
-
-                    if any(
-                        e["mainsnak"]["datavalue"]["value"]["id"] in NOPAGE
-                        for e in line["claims"].get("P31", {})
-                        if "datavalue" in e["mainsnak"]
-                    ):
-                        continue
-                    if any(
-                        e["mainsnak"]["datavalue"]["value"]["id"] in NOPAGE
-                        for e in line["claims"].get("P279", {})
-                        if "datavalue" in e["mainsnak"]
-                    ):
-                        continue
-
-                    line["sitelinks"] = {
-                        k[:-4]: v["title"]
-                        for k, v in line["sitelinks"].items()
-                        if k.endswith("wiki")
-                    }
-                    if len(line["sitelinks"]) == 0:
-                        continue
-
-                    for freebaseID in [
-                        e["mainsnak"]["datavalue"]["value"]
-                        for e in line["claims"].get("P646", {})
-                        if "datavalue" in e["mainsnak"]
-                    ]:
-                        wikidataID2freebaseID[line["id"]].append(freebaseID)
-                        freebaseID2wikidataID[freebaseID].append(line["id"])
-
-        wikidataID2freebaseID = dict(wikidataID2freebaseID)
-        filename = os.path.join(args.base_wikidata, "wikidataID2freebaseID.pkl")
-        logging.info("Saving {}".format(filename))
-        with open(filename, "wb") as f:
-            pickle.dump(wikidataID2freebaseID, f)
-
-        freebaseID2wikidataID = dict(freebaseID2wikidataID)
-        filename = os.path.join(args.base_wikidata, "freebaseID2wikidataID.pkl")
-        logging.info("Saving {}".format(filename))
-        with open(filename, "wb") as f:
-            pickle.dump(freebaseID2wikidataID, f)
+    # elif args.step == "redirects":
+    #
+    #     lang_redirect2title = {}
+    #     for lang in set(wiki_langs).intersection(set(mbart100_langs)):
+    #         with open(
+    #             "wikipedia_redirect/target/{}wiki-redirects.txt".format(lang)
+    #         ) as f:
+    #             for row in tqdm(csv.reader(f, delimiter="\t"), desc=lang):
+    #                 title = unquote(row[1]).split("#")[0].replace("_", " ")
+    #                 if title:
+    #                     title = title[0].upper() + title[1:]
+    #                     assert (lang, row[0]) not in lang_redirect2title
+    #                     lang_redirect2title[(lang, row[0])] = title
+    #
+    #     filename = os.path.join(args.base_wikidata, "lang_redirect2title.pkl")
+    #     logging.info("Saving {}".format(filename))
+    #     with open(filename, "wb") as f:
+    #         pickle.dump(lang_redirect2title, f)
+    #
+    # elif args.step == "freebase":
+    #
+    #     wikidataID2freebaseID = defaultdict(list)
+    #     freebaseID2wikidataID = defaultdict(list)
+    #
+    #     with open(os.path.join(args.base_wikidata, "wikidata-all.json"), "r") as fi:
+    #
+    #         iter_ = tqdm(fi)
+    #         for i, line in enumerate(iter_):
+    #             line = line.strip()
+    #             if line[-1] == ",":
+    #                 line = line[:-1]
+    #
+    #             if line == "[" or line == "]":
+    #                 continue
+    #
+    #             line = json.loads(line)
+    #
+    #             if line["type"] == "item":
+    #
+    #                 if any(
+    #                     e["mainsnak"]["datavalue"]["value"]["id"] in NOPAGE
+    #                     for e in line["claims"].get("P31", {})
+    #                     if "datavalue" in e["mainsnak"]
+    #                 ):
+    #                     continue
+    #                 if any(
+    #                     e["mainsnak"]["datavalue"]["value"]["id"] in NOPAGE
+    #                     for e in line["claims"].get("P279", {})
+    #                     if "datavalue" in e["mainsnak"]
+    #                 ):
+    #                     continue
+    #
+    #                 line["sitelinks"] = {
+    #                     k[:-4]: v["title"]
+    #                     for k, v in line["sitelinks"].items()
+    #                     if k.endswith("wiki")
+    #                 }
+    #                 if len(line["sitelinks"]) == 0:
+    #                     continue
+    #
+    #                 for freebaseID in [
+    #                     e["mainsnak"]["datavalue"]["value"]
+    #                     for e in line["claims"].get("P646", {})
+    #                     if "datavalue" in e["mainsnak"]
+    #                 ]:
+    #                     wikidataID2freebaseID[line["id"]].append(freebaseID)
+    #                     freebaseID2wikidataID[freebaseID].append(line["id"])
+    #
+    #     wikidataID2freebaseID = dict(wikidataID2freebaseID)
+    #     filename = os.path.join(args.base_wikidata, "wikidataID2freebaseID.pkl")
+    #     logging.info("Saving {}".format(filename))
+    #     with open(filename, "wb") as f:
+    #         pickle.dump(wikidataID2freebaseID, f)
+    #
+    #     freebaseID2wikidataID = dict(freebaseID2wikidataID)
+    #     filename = os.path.join(args.base_wikidata, "freebaseID2wikidataID.pkl")
+    #     logging.info("Saving {}".format(filename))
+    #     with open(filename, "wb") as f:
+    #         pickle.dump(freebaseID2wikidataID, f)

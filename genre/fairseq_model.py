@@ -7,7 +7,7 @@
 import logging
 import os
 from typing import List, Dict
-
+from fairseq import hub_utils
 import torch
 from fairseq.models.bart import BARTHubInterface, BARTModel
 
@@ -97,7 +97,7 @@ class GENRE(BARTModel):
         bpe="gpt2",
         **kwargs,
     ):
-        from fairseq import hub_utils
+
 
         x = hub_utils.from_pretrained(
             model_name_or_path,
@@ -123,7 +123,7 @@ class mGENRE(BARTModel):
         layernorm_embedding=True,
         **kwargs,
     ):
-        from fairseq import hub_utils
+
 
         x = hub_utils.from_pretrained(
             model_name_or_path,
