@@ -49,17 +49,17 @@ The mGENRE system as presented in [Multilingual Autoregressive Entity Linking](h
 
 In a nutshell, (m)GENRE uses a sequence-to-sequence approach to entity retrieval (e.g., linking), based on fine-tuned [BART](https://arxiv.org/abs/1910.13461) architecture or [mBART](https://arxiv.org/abs/2001.08210) (for multilingual). (m)GENRE performs retrieval generating the unique entity name conditioned on the input text using constrained beam search to only generate valid identifiers. Here an example of generation for Wikipedia page retrieval for open-domain question answering:
 
-![](GENRE-animation-QA.gif)
+![](images/GENRE-animation-QA.gif)
 
 For end-to-end entity linking GENRE re-generates the input text annotated with a markup:
 
-![](GENRE-animation-EL.gif)
+![](images/GENRE-animation-EL.gif)
 
 GENRE achieves state-of-the-art results on multiple datasets.
 
 mGENRE performs multilingual entity linking in 100+ languages treating language as latent variables and marginalizing over them:
 
-![](mGENRE-animation-EL.gif)
+![](images/mGENRE-animation-EL.gif)
 
 ## Main dependencies
 * python>=3.7
