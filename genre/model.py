@@ -1,10 +1,8 @@
 from typing import List, Optional
-
 # import spacy
 import torch.cuda
-
-from genre.fairseq_model import GENRE
-from genre.entity_linking import get_end_to_end_prefix_allowed_tokens_fn_fairseq as get_prefix_allowed_tokens_fn
+from genre.fairseq_model import mGENRE
+# from genre.entity_linking import get_end_to_end_prefix_allowed_tokens_fn_fairseq as get_prefix_allowed_tokens_fn
 from helper_pickle import pickle_load
 
 
@@ -18,15 +16,18 @@ class Model:
         #     model_name = "models/fairseq_e2e_entity_linking_aidayago"
         # else:
         #     model_name = "models/fairseq_e2e_entity_linking_wiki_abs"
-        self.model = GENRE.from_pretrained(model_name).eval()
+        print('Loading {}'.format(model_name))
+        self.model = mGENRE.from_pretrained(model_name).eval()
         if torch.cuda.is_available():
             print("move model to GPU...")
             self.model = self.model.cuda()
+        print('Loading {}'.format(mention_trie))
         self.mention_trie = pickle_load(mention_trie, verbose=True)
         # self.mention_to_candidates_dict = pickle_load(mention_to_candidates_dict, verbose=True)
         # self.candidates_trie = pickle_load(candidates_trie, verbose=True)
         self.spacy_model = None
-        self.lang_title2wikidataID = lang_title2wikidataID
+        print('Loading {}'.format(lang_title2wikidataID))
+        self.lang_title2wikidataID = pickle_load(lang_title2wikidataID, verbose=True)
 
     def _ensure_spacy(self):
         if self.spacy_model is None:

@@ -21,8 +21,7 @@ import pickle
 from wikidata.client import Client
 
 
-with open("../data/lang_title2wikidataID-normalized_with_redirect.pkl", "rb") as f:
-    lang_title2wikidataID = pickle.load(f)
+
 
 # fast but memory inefficient prefix tree (trie) -- it is implemented with nested python `dict`
 # NOTE: loading this map may take up to 10 minutes and occupy a lot of RAM!
@@ -34,14 +33,16 @@ with open("../data/lang_title2wikidataID-normalized_with_redirect.pkl", "rb") as
 #     trie = pickle.load(f)
 
 
-trie_path = "../data/titles_lang_all105_marisa_trie_with_redirect.pkl"
+# trie_path = "../data/titles_lang_all105_marisa_trie_with_redirect.pkl"
+trie_path = "../data/titles_lang_all105_trie_with_redirect.pkl"
 model_path = "../models/fairseq_multilingual_entity_disambiguation"
-model = mGENRE.from_pretrained(model_path).eval()
-print("load model...{}".format())
+lang_title2wikidataID_path = "../data/lang_title2wikidataID-normalized_with_redirect.pkl"
+# model = mGENRE.from_pretrained(model_path).eval()
+# print("load model...{}".format(model_path))
 
 model = Model(model_name=model_path,
               mention_trie=trie_path,
-              lang_title2wikidataID=lang_title2wikidataID)
+              lang_title2wikidataID=lang_title2wikidataID_path)
 
 
 client = Client()  # doctest: +SKIP
