@@ -1,5 +1,25 @@
-from genre.trie import Trie, MarisaTrie
+# Copyright (c) Facebook, Inc. and its affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+
+import argparse
+import logging
+import os
 import pickle
+import re
+# for pytorch/fairseq
+from genre.fairseq_model import mGENRE
+from model import Model
+import jsonlines
+import pandas
+from utils import chunk_it, get_wikidata_ids
+from tqdm.auto import tqdm, trange
+from data_utils import _read_conll, get_entities
+import pickle
+from wikidata.client import Client
+
 
 with open("../data/lang_title2wikidataID-normalized_with_redirect.pkl", "rb") as f:
     lang_title2wikidataID = pickle.load(f)
@@ -10,54 +30,242 @@ with open("../data/lang_title2wikidataID-normalized_with_redirect.pkl", "rb") as
 #     trie = Trie.load_from_dict(pickle.load(f))
 
 # memory efficient but slower prefix tree (trie) -- it is implemented with `marisa_trie`
-with open("../data/titles_lang_all105_marisa_trie_with_redirect.pkl", "rb") as f:
-    trie = pickle.load(f)
+# with open("../data/titles_lang_all105_marisa_trie_with_redirect.pkl", "rb") as f:
+#     trie = pickle.load(f)
 
-# for pytorch/fairseq
-from genre.fairseq_model import mGENRE
 
-import pickle
-import sys
+trie_path = "../data/titles_lang_all105_marisa_trie_with_redirect.pkl"
+model_path = "../models/fairseq_multilingual_entity_disambiguation"
+model = mGENRE.from_pretrained(model_path).eval()
+print("load model...{}".format())
 
-from genre.utils import get_entity_spans_fairseq as get_entity_spans
-from genre.fairseq_model import mGENRE
-from genre.utils import get_markdown
+model = Model(model_name=model_path,
+              mention_trie=trie_path,
+              lang_title2wikidataID=lang_title2wikidataID)
 
+
+client = Client()  # doctest: +SKIP
 
 if __name__ == "__main__":
-    model_path = "../models/fairseq_multilingual_entity_disambiguation"
-    # dict_path = "data/mention_to_candidates_dict.pkl"
-    trie_path = "../data/titles_lang_all105_marisa_trie_with_redirect.pkl"
 
-    print('Loading {}'.format(model_path))
-    model = mGENRE.from_pretrained(model_path).eval()
-    print('Loading {}'.format(trie_path))
-    with open(trie_path, "rb") as f:
-        mention_trie = pickle.load(f)
-    # with open(dict_path, "rb") as f:
-    #     mention_to_candidates_dict = pickle.load(f)
+    parser = argparse.ArgumentParser()
 
-    text = """Home Depot CEO Nardelli quits Home-improvement retailer's chief executive had been criticized over pay ATLANTA - Bob Nardelli abruptly resigned Wednesday as chairman and chief executive of The Home Depot Inc. after a six-year tenure that saw the world’s largest home improvement store chain post big profits but left investors disheartened by poor stock performance. Nardelli has also been under fire by investors for his hefty pay and is leaving with a severance package valued at about $210 million. He became CEO in December 2000 after being passed over for the top job at General Electric Co., where Nardelli had been a senior executive. Home Depot said Nardelli was being replaced by Frank Blake, its vice chairman, effective immediately. Blake’s appointment is permanent, Home Depot spokesman Jerry Shields said. What he will be paid was not immediately disclosed, Shields said. The company declined to make Blake available for comment, and a message left for Nardelli with his secretary was not immediately returned. Before Wednesday’s news, Home Depot’s stock had been down more than 3 percent on a split-adjusted basis since Nardelli took over. Nardelli’s sudden departure was stunning in that he told The Associated Press as recently as Sept. 1 that he had no intention of leaving, and a key director also said that the board was pleased with Nardelli despite the uproar by some investors. Asked in that interview if he had thought of hanging up his orange apron and leaving Home Depot, Nardelli said unequivocally that he hadn’t. Asked what he thought he would be doing 10 years from now, Nardelli said, “Selling hammers.” For The Home Depot? “Absolutely,” he said at the time. Home Depot said Nardelli’s decision to resign was by mutual agreement with the Atlanta-based company. “We are very grateful to Bob for his strong leadership of The Home Depot over the past six years. Under Bob’s tenure, the company made significant and necessary investments that greatly improved the company’s infrastructure and operations, expanded our markets to include wholesale distribution and new geographies, and undertook key strategic initiatives to strengthen the company’s foundation for the future,” Home Depot’s board said in a statement. Nardelli was a nuts-and-bolts leader, a former college football player and friend of President Bush. He helped increase revenue and profits at Home Depot and increase the number of stores the company operates to more than 2,000. Home Depot’s earnings per share have increased by approximately 150 percent over the last five years."""
-
-    sentences = [text]
-
-    results = model.sample(
-        sentences,
-        beam=10,
-        prefix_allowed_tokens_fn=lambda batch_id, sent: [
-            e for e in trie.get(sent.tolist())
-            if e < len(model.task.target_dictionary)
-            # for huggingface/transformers
-            # if e < len(model2.tokenizer) - 1
-        ],
+    parser.add_argument(
+        "--input_dir",
+        type=str,
+    )
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+    )
+    parser.add_argument(
+        "--base_wikidata",
+        type=str,
+        help="Base folder with Wikidata data.",
+    )
+    parser.add_argument(
+        "-d",
+        "--debug",
+        help="Print lots of debugging statements",
+        action="store_const",
+        dest="loglevel",
+        const=logging.DEBUG,
+        default=logging.WARNING,
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        help="Be verbose",
+        action="store_const",
+        dest="loglevel",
+        const=logging.INFO,
     )
 
-    entity_spans = get_entity_spans(
-        model,
-        sentences,
-        mention_trie=mention_trie,
-        mention_to_candidates_dict=model.task.target_dictionary
-    )
-    import pdb;pdb.set_trace()
-    markdown = get_markdown(sentences, entity_spans)[0]
-    print(markdown)
+    args, _ = parser.parse_known_args()
+
+    logging.basicConfig(level=logging.DEBUG)
+
+    # filename = os.path.join(args.base_wikidata, "lang_title2wikidataID.pkl")
+    # logging.info("Loading {}".format(filename))
+    # with open(filename, "rb") as f:
+    #     lang_title2wikidataID = pickle.load(f)
+    #
+    # filename = os.path.join(args.base_wikidata, "lang_redirect2title.pkl")
+    # logging.info("Loading {}".format(filename))
+    # with open(filename, "rb") as f:
+    #     lang_redirect2title = pickle.load(f)
+    #
+    # filename = os.path.join(args.base_wikidata, "label_or_alias2wikidataID.pkl")
+    # logging.info("Loading {}".format(filename))
+    # with open(filename, "rb") as f:
+    #     label_or_alias2wikidataID = pickle.load(f)
+
+    for lang in os.listdir(args.input_dir):
+        print(lang)
+        # import pdb;pdb.set_trace()
+        for root, dirs, files in os.walk(os.path.join(args.input_dir, lang), topdown=False):
+            print(files)
+            for name in files:
+                filename = os.path.join(root, name)
+                print(filename)
+                logging.info("Converting {}".format(lang))
+                for split in ("test", "train", "dev"):
+
+                    kilt_dataset = []
+                    if split in filename and '.tsv' in filename:
+
+                        # for filename in tqdm(
+                        #     set(
+                        #         ".".join(e.split(".")[:-1])
+                        #         for e in os.listdir(os.path.join(args.input_dir, lang, split))
+                        #     )
+                        # ):
+                        #     with open(filename) as f:
+                        #         doc = f.read()
+
+                            # with open(
+                            #     os.path.join(args.input_dir, lang, split, filename + ".mentions")
+                            # ) as f:
+                            #     mentions = f.readlines()
+
+                        with open(filename, 'r') as f:
+                            lines = f.readlines()
+
+                        headers = [
+                            'raw_words', 'target', 'link'
+                        ]
+                        # TODO: This needs to be changed if the data format is different or the
+                        # order of the elements in the file is different
+                        indexes = list(range(10))  # -3 is for EL
+                        columns = ["TOKEN", "NE-COARSE-LIT", "NE-COARSE-METO", "NE-FINE-LIT",
+                                   "NE-FINE-METO", "NE-FINE-COMP", "NE-NESTED",
+                                   "NEL-LIT", "NEL-METO", "MISC"]
+                        if not isinstance(headers, (list, tuple)):
+                            raise TypeError(
+                                'invalid headers: {}, should be list of strings'.format(headers))
+                        phrases = _read_conll(filename, encoding='utf-8', sep='\t', indexes=indexes, dropna=True)
+
+                        entity = client.get('Q7344037', load=True)
+
+                        sentences = []
+                        for phrase in phrases:
+                            # import pdb;pdb.set_trace()
+                            # [('R . Ellis', 'pers', 'Q7344037'), ('the Cambridge Journal of Philology', 'work', 'NIL'),
+                            # ('Vol . IV', 'scope', 'NIL'), ('A . Nauck', 'pers', 'NIL'), ('Leipzig', 'loc', 'NIL'), ('1856',
+                            # 'date', 'NIL')]
+
+                            idx, phrase = phrase
+                            tokens, entity_tags, link_tags = phrase[0], phrase[1], phrase[-3]
+                            entities = get_entities(tokens, entity_tags, link_tags)
+
+                            # [('R . Ellis', 'pers', 'Q7344037', [12, 13, 14])
+                            for entity in entities:
+                                meta = {
+                                    "left_context": ' '.join(tokens[:entity[-1][0]]),
+                                    "right_context": ' '.join(tokens[entity[-1][-1]+1:]),
+                                    "mention": entity[0],
+                                    "label_title": entity,
+                                    "label": entity,
+                                    "label_id": entity
+                                }
+                                paragraph = meta["left_context"] \
+                                      + " [START_ENT] " \
+                                      + meta["mention"] \
+                                      + " [END_ENT] " \
+                                      + meta["right_context"]
+                                sentences.append(paragraph)
+
+                                prediction = model.predict_paragraph(paragraph, split_sentences=False)
+                                print("PARAGRAPH:", paragraph, prediction)
+                                # print(entity[2])
+                                # print('-'*20)
+
+                        # results = model.sample(
+                        #     sentences,
+                        #     prefix_allowed_tokens_fn=lambda batch_id, sent: [
+                        #         e for e in trie.get(sent.tolist())
+                        #         if e < len(model.task.target_dictionary)
+                        #         # for huggingface/transformers
+                        #         # if e < len(model2.tokenizer) - 1
+                        #     ],
+                        #     text_to_id=lambda x: max(lang_title2wikidataID[tuple(reversed(x.split(" >> ")))],
+                        #                              key=lambda y: int(y[1:])),
+                        #     marginalize=True,
+                        # )
+                        # for result, phrase in zip(results, phrase):
+                        #     print(result)
+
+                                # wikidataIDs = get_wikidata_ids(
+                                #     #title.replace("_", " "),
+                                #     meta['label_title'],
+                                #     lang,
+                                #     lang_title2wikidataID,
+                                #     lang_redirect2title,
+                                #     label_or_alias2wikidataID,
+                                # )[0]
+                                #
+                                # is_hard = False
+                                # item = {
+                                #     "id": "HIPE-{}-{}-{}".format(lang, filename, i),
+                                #     "input": (
+                                #         meta["left_context"]
+                                #         + " [START] "
+                                #         + meta["mention"]
+                                #         + " [END] "
+                                #         + meta["right_context"]
+                                #     ),
+                                #     "output": [{"answer": list(wikidataIDs)}],
+                                #     "meta": meta,
+                                #     "is_hard": is_hard,
+                                # }
+                                # kilt_dataset.append(item)
+                            # import pdb;
+                            #
+                            # pdb.set_trace()
+
+                    # for i, mention in enumerate(mentions):
+                    #     start, end, _, title, is_hard = mention.strip().split("\t")
+                    #     start, end, is_hard = int(start), int(end), bool(int(is_hard))
+                    #     wikidataIDs = get_wikidata_ids(
+                    #         title.replace("_", " "),
+                    #         lang,
+                    #         lang_title2wikidataID,
+                    #         lang_redirect2title,
+                    #         label_or_alias2wikidataID,
+                    #     )[0]
+                    #
+                    #     meta = {
+                    #         "left_context": doc[:start].strip(),
+                    #         "mention": doc[start:end].strip(),
+                    #         "right_context": doc[end:].strip(),
+                    #     }
+                    #     item = {
+                    #         "id": "TR2016-{}-{}-{}".format(lang, filename, i),
+                    #         "input": (
+                    #             meta["left_context"]
+                    #             + " [START] "
+                    #             + meta["mention"]
+                    #             + " [END] "
+                    #             + meta["right_context"]
+                    #         ),
+                    #         "output": [{"answer": list(wikidataIDs)}],
+                    #         "meta": meta,
+                    #         "is_hard": is_hard,
+                    #     }
+                    #     kilt_dataset.append(item)
+
+                    filename = os.path.join(
+                        args.output_dir, lang, "{}-kilt-{}.jsonl".format(lang, split)
+                    )
+                    logging.info("Saving {}".format(filename))
+                    with jsonlines.open(filename, "w") as f:
+                        f.write_all(kilt_dataset)
+
+                    kilt_dataset = [e for e in kilt_dataset if e["is_hard"]]
+
+                    filename = os.path.join(
+                        args.output_dir, lang, "{}-hard.jsonl".format(filename.split(".")[0])
+                    )
+                    logging.info("Saving {}".format(filename))
+                    with jsonlines.open(filename, "w") as f:
+                        f.write_all(kilt_dataset)
