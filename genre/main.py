@@ -22,7 +22,6 @@ import pickle
 from tqdm import tqdm
 
 
-
 # fast but memory inefficient prefix tree (trie) -- it is implemented with nested python `dict`
 # NOTE: loading this map may take up to 10 minutes and occupy a lot of RAM!
 # with open("../data/titles_lang_all105_trie_with_redirect.pkl", "rb") as f:
@@ -32,20 +31,14 @@ from tqdm import tqdm
 # with open("../data/titles_lang_all105_marisa_trie_with_redirect.pkl", "rb") as f:
 #     trie = pickle.load(f)
 
-
 # trie_path = "../data/titles_lang_all105_marisa_trie_with_redirect.pkl"
 trie_path = "../data/titles_lang_all105_trie_with_redirect.pkl"
 model_path = "../models/fairseq_multilingual_entity_disambiguation"
 lang_title2wikidataID_path = "../data/lang_title2wikidataID-normalized_with_redirect.pkl"
-# model = mGENRE.from_pretrained(model_path).eval()
-# print("load model...{}".format(model_path))
 
 model = Model(model_name=model_path,
               mention_trie=trie_path,
               lang_title2wikidataID=lang_title2wikidataID_path)
-
-
-# client = Client()  # doctest: +SKIP
 
 if __name__ == "__main__":
 
@@ -86,24 +79,6 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=logging.DEBUG)
 
-    # filename = os.path.join(args.base_wikidata, "lang_title2wikidataID.pkl")
-    # logging.info("Loading {}".format(filename))
-    # with open(filename, "rb") as f:
-    #     lang_title2wikidataID = pickle.load(f)
-    #
-    # filename = os.path.join(args.base_wikidata, "lang_redirect2title.pkl")
-    # logging.info("Loading {}".format(filename))
-    # with open(filename, "rb") as f:
-    #     lang_redirect2title = pickle.load(f)
-    #
-    # filename = os.path.join(args.base_wikidata, "label_or_alias2wikidataID.pkl")
-    # logging.info("Loading {}".format(filename))
-    # with open(filename, "rb") as f:
-    #     label_or_alias2wikidataID = pickle.load(f)
-
-    # for lang in os.listdir(args.input_dir):
-    #     print(lang)
-        # import pdb;pdb.set_trace()
     for root, dirs, files in os.walk(args.input_dir, topdown=False):
         for name in files:
             filename = os.path.join(root, name)
@@ -124,13 +99,26 @@ if __name__ == "__main__":
                 # TODO: This needs to be changed if the data format is different or the
                 # order of the elements in the file is different
                 indexes = list(range(10))  # -3 is for EL
-                columns = ["TOKEN", "NE-COARSE-LIT", "NE-COARSE-METO", "NE-FINE-LIT",
-                           "NE-FINE-METO", "NE-FINE-COMP", "NE-NESTED",
-                           "NEL-LIT", "NEL-METO", "MISC"]
+                columns = [
+                    "TOKEN",
+                    "NE-COARSE-LIT",
+                    "NE-COARSE-METO",
+                    "NE-FINE-LIT",
+                    "NE-FINE-METO",
+                    "NE-FINE-COMP",
+                    "NE-NESTED",
+                    "NEL-LIT",
+                    "NEL-METO",
+                    "MISC"]
                 if not isinstance(headers, (list, tuple)):
                     raise TypeError(
                         'invalid headers: {}, should be list of strings'.format(headers))
-                phrases = _read_conll(filename, encoding='utf-8', sep='\t', indexes=indexes, dropna=True)
+                phrases = _read_conll(
+                    filename,
+                    encoding='utf-8',
+                    sep='\t',
+                    indexes=indexes,
+                    dropna=True)
 
                 # entity = client.get('Q7344037', load=True)
 
@@ -138,7 +126,7 @@ if __name__ == "__main__":
                 with open(filename.replace('.tsv', '_results.tsv'), 'w') as f:
                     f.write('\t'.join(columns) + '\n')
                     for phrase in tqdm(phrases, total=len(phrases)):
-                        # import pdb;pdb.set_trace()
+
                         # [('R . Ellis', 'pers', 'Q7344037'), ('the Cambridge Journal of Philology', 'work', 'NIL'),
                         # ('Vol . IV', 'scope', 'NIL'), ('A . Nauck', 'pers', 'NIL'), ('Leipzig', 'loc', 'NIL'), ('1856',
                         # 'date', 'NIL')]
@@ -152,22 +140,21 @@ if __name__ == "__main__":
                         for entity in entities:
                             meta = {
                                 "left_context": ' '.join(tokens[:entity[-1][0]]),
-                                "right_context": ' '.join(tokens[entity[-1][-1]+1:]),
+                                "right_context": ' '.join(tokens[entity[-1][-1] + 1:]),
                                 "mention": entity[0],
                                 "label_title": entity,
                                 "label": entity,
                                 "label_id": entity
                             }
                             paragraph = meta["left_context"] \
-                                  + " [START] " \
-                                  + meta["mention"] \
+                                + " [START] " \
+                                + meta["mention"] \
                                   + " [END] " \
                                   + meta["right_context"]
                             sentences.append(paragraph)
 
-                            qid, text = model.predict_paragraph(paragraph,
-                                                                 split_sentences=False,
-                                                                 split_long_texts=False)[0]
+                            qid, text = model.predict_paragraph(
+                                paragraph, split_sentences=False, split_long_texts=False)[0]
                             for pos in entity[-1]:
                                 pos_qid[pos] = qid
                                 pos_ner[pos] = 'I-' + entity[1]
@@ -177,7 +164,13 @@ if __name__ == "__main__":
 
                             f.write(token + '\t')
                             if idx in pos_ner:
-                                f.write(pos_ner[idx] + '\tO\tO\tO\tO\tO\t' + pos_qid[idx] + '\tO\tO\t' + text + '\n')
+                                f.write(
+                                    pos_ner[idx] +
+                                    '\tO\tO\tO\tO\tO\t' +
+                                    pos_qid[idx] +
+                                    '\tO\tO\t' +
+                                    text +
+                                    '\n')
                             else:
                                 f.write('O\tO\tO\tO\tO\tO\tO\tO\tO\n')
 
@@ -209,22 +202,22 @@ if __name__ == "__main__":
                         #
                         # is_hard = False
                         # item = {
-                            #     "id": "HIPE-{}-{}-{}".format(lang, filename, i),
-                            #     "input": (
-                            #         meta["left_context"]
-                            #         + " [START] "
-                            #         + meta["mention"]
-                            #         + " [END] "
-                            #         + meta["right_context"]
-                            #     ),
-                            #     "output": [{"answer": list(wikidataIDs)}],
-                            #     "meta": meta,
-                            #     "is_hard": is_hard,
-                            # }
-                                # kilt_dataset.append(item)
-                            # import pdb;
-                            #
-                            # pdb.set_trace()
+                        #     "id": "HIPE-{}-{}-{}".format(lang, filename, i),
+                        #     "input": (
+                        #         meta["left_context"]
+                        #         + " [START] "
+                        #         + meta["mention"]
+                        #         + " [END] "
+                        #         + meta["right_context"]
+                        #     ),
+                        #     "output": [{"answer": list(wikidataIDs)}],
+                        #     "meta": meta,
+                        #     "is_hard": is_hard,
+                        # }
+                        # kilt_dataset.append(item)
+                        # import pdb;
+                        #
+                        # pdb.set_trace()
 
                     # for i, mention in enumerate(mentions):
                     #     start, end, _, title, is_hard = mention.strip().split("\t")

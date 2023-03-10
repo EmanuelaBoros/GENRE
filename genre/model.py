@@ -1,9 +1,6 @@
-import pdb
+
 from typing import List, Optional
-# import spacy
-import torch.cuda
 from fairseq_model import mGENRE
-# from genre.entity_linking import get_end_to_end_prefix_allowed_tokens_fn_fairseq as get_prefix_allowed_tokens_fn
 from helper_pickle import pickle_load
 from trie import Trie, MarisaTrie
 
@@ -23,12 +20,14 @@ class Model:
         if torch.cuda.is_available():
             print("move model to GPU...")
             self.model = self.model.cuda()
-        self.mention_trie = Trie.load_from_dict(pickle_load(mention_trie, verbose=True))
+        self.mention_trie = Trie.load_from_dict(
+            pickle_load(mention_trie, verbose=True))
 
         # self.mention_to_candidates_dict = pickle_load(mention_to_candidates_dict, verbose=True)
         # self.candidates_trie = pickle_load(candidates_trie, verbose=True)
         self.spacy_model = None
-        self.lang_title2wikidataID = pickle_load(lang_title2wikidataID, verbose=True)
+        self.lang_title2wikidataID = pickle_load(
+            lang_title2wikidataID, verbose=True)
 
     def _ensure_spacy(self):
         if self.spacy_model is None:
@@ -60,7 +59,11 @@ class Model:
             split_parts.append(part)
         return split_parts
 
-    def predict_paragraph(self, text: str, split_sentences: bool, split_long_texts: bool) -> str:
+    def predict_paragraph(
+            self,
+            text: str,
+            split_sentences: bool,
+            split_long_texts: bool) -> str:
         if split_sentences:
             sentences = self._split_sentences(text)
         elif split_long_texts:
@@ -99,7 +102,8 @@ class Model:
                 except Exception:
                     result = None
                 # print("RESULT:", result)
-                if result is not None and len(result) > 0 and _is_prediction_complete(part, result[0]["text"]):
+                if result is not None and len(
+                        result) > 0 and _is_prediction_complete(part, result[0]["text"]):
                     results.append(result[0]["text"])
                 elif end - start == 1:
                     results.append(part)
@@ -122,13 +126,7 @@ class Model:
         if len(text) > 0 and text[0] != " ":
             text = " " + text  # necessary to detect mentions in the beginning of a sentence
         sentences = [text]
-        # prefix_allowed_tokens_fn = get_prefix_allowed_tokens_fn(
-        #     self.model,
-        #     sentences,
-        #     mention_trie=self.mention_trie,
-        #     mention_to_candidates_dict=self.mention_to_candidates_dict,
-        #     candidates_trie=self.candidates_trie
-        # )
+
         try:
             result = self.model.sample(
                 sentences, prefix_allowed_tokens_fn=lambda batch_id, sent: [
@@ -137,30 +135,16 @@ class Model:
                     # for huggingface/transformers
                     # if e < len(model2.tokenizer) - 1
                 ],
-                text_to_id=lambda x: max(self.lang_title2wikidataID[tuple(reversed(x.split(" >> ")))], key=lambda y: int(y[1:])),
+                text_to_id=lambda x: max(self.lang_title2wikidataID[tuple(
+                    reversed(x.split(" >> ")))], key=lambda y: int(y[1:])),
                 marginalize=True,
             )
         except Exception as e:
             print('Sentence too long:', e)
             print(sentences[0])
-            result = [[{"texts": "SENTENCE TOO LONG", "id": "NIL", "score": 0.0}]]
-        # import pdb;pdb.set_trace()
-        # model.sample(
-        #     sentences,
-        #     prefix_allowed_tokens_fn=lambda batch_id, sent: [
-        #         e for e in trie.get(sent.tolist())
-        #         if e < len(model.task.target_dictionary)
-        #         # for huggingface/transformers
-        #         # if e < len(model2.tokenizer) - 1
-        #     ],
-        #     text_to_id=lambda x: max(lang_title2wikidataID[tuple(reversed(x.split(" >> ")))], key=lambda y: int(y[1:])),
-        #     marginalize=True,
-        # )
+            result = [
+                [{"texts": "SENTENCE TOO LONG", "id": "NIL", "score": 0.0}]]
 
-        # result = self.model.sample(
-        #     sentences,
-        #     prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
-        # )
         return result
 
     def predict(self, text: str) -> str:
