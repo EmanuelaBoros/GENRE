@@ -1,9 +1,11 @@
+import pdb
 from typing import List, Optional
 # import spacy
 import torch.cuda
-from genre.fairseq_model import mGENRE
+from fairseq_model import mGENRE
 # from genre.entity_linking import get_end_to_end_prefix_allowed_tokens_fn_fairseq as get_prefix_allowed_tokens_fn
 from helper_pickle import pickle_load
+from trie import Trie, MarisaTrie
 
 
 class Model:
@@ -21,12 +23,11 @@ class Model:
         if torch.cuda.is_available():
             print("move model to GPU...")
             self.model = self.model.cuda()
-        print('Loading {}'.format(mention_trie))
-        self.mention_trie = pickle_load(mention_trie, verbose=True)
+        self.mention_trie = Trie.load_from_dict(pickle_load(mention_trie, verbose=True))
+
         # self.mention_to_candidates_dict = pickle_load(mention_to_candidates_dict, verbose=True)
         # self.candidates_trie = pickle_load(candidates_trie, verbose=True)
         self.spacy_model = None
-        print('Loading {}'.format(lang_title2wikidataID))
         self.lang_title2wikidataID = pickle_load(lang_title2wikidataID, verbose=True)
 
     def _ensure_spacy(self):
@@ -68,14 +69,15 @@ class Model:
             sentences = [text]
         predictions = []
         for sent in sentences:
-            print("IN:", sent)
+            # print("IN:", sent)
             if len(sent.strip()) == 0:
                 prediction = sent
+                qid = 'NIL'
             else:
-                prediction = self.predict(sent)
-            print("PREDICTION:", prediction)
-            predictions.append(prediction)
-        return " ".join(predictions)
+                qid, prediction = self.predict(sent)
+            # print("PREDICTION:", prediction)
+            predictions.append((qid, prediction))
+        return predictions
 
     def predict_iteratively(self, text: str):
         text = self._preprocess(text)
@@ -83,7 +85,7 @@ class Model:
         n_parts = 1
         while n_parts <= len(sentences):
             plural_s = "s" if n_parts > 1 else ""
-            print(f"INFO: Predicting {n_parts} part{plural_s}.")
+            # print(f"INFO: Predicting {n_parts} part{plural_s}.")
             sents_per_part = len(sentences) / n_parts
             results = []
             did_fail = False
@@ -96,7 +98,7 @@ class Model:
                     result = self._query_model(part)[0]
                 except Exception:
                     result = None
-                print("RESULT:", result)
+                # print("RESULT:", result)
                 if result is not None and len(result) > 0 and _is_prediction_complete(part, result[0]["text"]):
                     results.append(result[0]["text"])
                 elif end - start == 1:
@@ -127,17 +129,33 @@ class Model:
         #     mention_to_candidates_dict=self.mention_to_candidates_dict,
         #     candidates_trie=self.candidates_trie
         # )
-        result = self.model.sample(
-            sentences,
-            prefix_allowed_tokens_fn=lambda batch_id, sent: [
-                e for e in self.mention_trie.get(sent.tolist())
-                if e < len(self.model.task.target_dictionary)
-                # for huggingface/transformers
-                # if e < len(model2.tokenizer) - 1
-            ],
-            text_to_id=lambda x: max(self.lang_title2wikidataID[tuple(reversed(x.split(" >> ")))], key=lambda y: int(y[1:])),
-            marginalize=True,
-        )
+        try:
+            result = self.model.sample(
+                sentences, prefix_allowed_tokens_fn=lambda batch_id, sent: [
+                    e for e in self.mention_trie.get(sent.tolist())
+                    if e < len(self.model.task.target_dictionary)
+                    # for huggingface/transformers
+                    # if e < len(model2.tokenizer) - 1
+                ],
+                text_to_id=lambda x: max(self.lang_title2wikidataID[tuple(reversed(x.split(" >> ")))], key=lambda y: int(y[1:])),
+                marginalize=True,
+            )
+        except Exception as e:
+            print('Sentence too long:', e)
+            print(sentences[0])
+            result = [[{"texts": "SENTENCE TOO LONG", "id": "NIL", "score": 0.0}]]
+        # import pdb;pdb.set_trace()
+        # model.sample(
+        #     sentences,
+        #     prefix_allowed_tokens_fn=lambda batch_id, sent: [
+        #         e for e in trie.get(sent.tolist())
+        #         if e < len(model.task.target_dictionary)
+        #         # for huggingface/transformers
+        #         # if e < len(model2.tokenizer) - 1
+        #     ],
+        #     text_to_id=lambda x: max(lang_title2wikidataID[tuple(reversed(x.split(" >> ")))], key=lambda y: int(y[1:])),
+        #     marginalize=True,
+        # )
 
         # result = self.model.sample(
         #     sentences,
@@ -146,12 +164,16 @@ class Model:
         return result
 
     def predict(self, text: str) -> str:
-        text = self._preprocess(text)
+        # text = self._preprocess(text)
 
         result = self._query_model(text)
 
-        text = result[0][0]["text"].strip()
-        return text
+        text = result[0][0]["texts"][0].strip()
+        qid = result[0][0]["id"]
+        score = result[0][0]['score'].item()
+
+        # is score ==
+        return qid, text
 
 
 def _is_prediction_complete(text, prediction):

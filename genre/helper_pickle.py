@@ -7,7 +7,7 @@ def pickle_load(path: Optional[str], verbose=False):
     if path is None:
         return None
     if verbose:
-        print("load %s..." % path)
+        print('Loading {}'.format(path))
     with open(path, "rb") as f:
         obj = pickle.load(f)
     return obj

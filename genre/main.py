@@ -10,7 +10,7 @@ import os
 import pickle
 import re
 # for pytorch/fairseq
-from genre.fairseq_model import mGENRE
+from fairseq_model import mGENRE
 from model import Model
 import jsonlines
 import pandas
@@ -18,8 +18,8 @@ from utils import chunk_it, get_wikidata_ids
 from tqdm.auto import tqdm, trange
 from data_utils import _read_conll, get_entities
 import pickle
-from wikidata.client import Client
-
+# from wikidata.client import Client
+from tqdm import tqdm
 
 
 
@@ -45,7 +45,7 @@ model = Model(model_name=model_path,
               lang_title2wikidataID=lang_title2wikidataID_path)
 
 
-client = Client()  # doctest: +SKIP
+# client = Client()  # doctest: +SKIP
 
 if __name__ == "__main__":
 
@@ -101,124 +101,126 @@ if __name__ == "__main__":
     # with open(filename, "rb") as f:
     #     label_or_alias2wikidataID = pickle.load(f)
 
-    for lang in os.listdir(args.input_dir):
-        print(lang)
+    # for lang in os.listdir(args.input_dir):
+    #     print(lang)
         # import pdb;pdb.set_trace()
-        for root, dirs, files in os.walk(os.path.join(args.input_dir, lang), topdown=False):
-            print(files)
-            for name in files:
-                filename = os.path.join(root, name)
-                print(filename)
-                logging.info("Converting {}".format(lang))
-                for split in ("test", "train", "dev"):
+    for root, dirs, files in os.walk(args.input_dir, topdown=False):
+        for name in files:
+            filename = os.path.join(root, name)
+            print(filename)
 
-                    kilt_dataset = []
-                    if split in filename and '.tsv' in filename:
+            kilt_dataset = []
+            if ("test" in filename) and ('.tsv' in filename) \
+                    and ('masked' not in filename) \
+                    and ('results' not in filename) \
+                    and ('bart' not in filename):
 
-                        # for filename in tqdm(
-                        #     set(
-                        #         ".".join(e.split(".")[:-1])
-                        #         for e in os.listdir(os.path.join(args.input_dir, lang, split))
-                        #     )
-                        # ):
-                        #     with open(filename) as f:
-                        #         doc = f.read()
+                with open(filename, 'r') as f:
+                    lines = f.readlines()
 
-                            # with open(
-                            #     os.path.join(args.input_dir, lang, split, filename + ".mentions")
-                            # ) as f:
-                            #     mentions = f.readlines()
+                headers = [
+                    'raw_words', 'target', 'link'
+                ]
+                # TODO: This needs to be changed if the data format is different or the
+                # order of the elements in the file is different
+                indexes = list(range(10))  # -3 is for EL
+                columns = ["TOKEN", "NE-COARSE-LIT", "NE-COARSE-METO", "NE-FINE-LIT",
+                           "NE-FINE-METO", "NE-FINE-COMP", "NE-NESTED",
+                           "NEL-LIT", "NEL-METO", "MISC"]
+                if not isinstance(headers, (list, tuple)):
+                    raise TypeError(
+                        'invalid headers: {}, should be list of strings'.format(headers))
+                phrases = _read_conll(filename, encoding='utf-8', sep='\t', indexes=indexes, dropna=True)
 
-                        with open(filename, 'r') as f:
-                            lines = f.readlines()
+                # entity = client.get('Q7344037', load=True)
 
-                        headers = [
-                            'raw_words', 'target', 'link'
-                        ]
-                        # TODO: This needs to be changed if the data format is different or the
-                        # order of the elements in the file is different
-                        indexes = list(range(10))  # -3 is for EL
-                        columns = ["TOKEN", "NE-COARSE-LIT", "NE-COARSE-METO", "NE-FINE-LIT",
-                                   "NE-FINE-METO", "NE-FINE-COMP", "NE-NESTED",
-                                   "NEL-LIT", "NEL-METO", "MISC"]
-                        if not isinstance(headers, (list, tuple)):
-                            raise TypeError(
-                                'invalid headers: {}, should be list of strings'.format(headers))
-                        phrases = _read_conll(filename, encoding='utf-8', sep='\t', indexes=indexes, dropna=True)
+                sentences = []
+                with open(filename.replace('.tsv', '_results.tsv'), 'w') as f:
+                    f.write('\t'.join(columns) + '\n')
+                    for phrase in tqdm(phrases, total=len(phrases)):
+                        # import pdb;pdb.set_trace()
+                        # [('R . Ellis', 'pers', 'Q7344037'), ('the Cambridge Journal of Philology', 'work', 'NIL'),
+                        # ('Vol . IV', 'scope', 'NIL'), ('A . Nauck', 'pers', 'NIL'), ('Leipzig', 'loc', 'NIL'), ('1856',
+                        # 'date', 'NIL')]
 
-                        entity = client.get('Q7344037', load=True)
+                        idx, phrase = phrase
+                        tokens, entity_tags, link_tags = phrase[0], phrase[1], phrase[-3]
+                        entities = get_entities(tokens, entity_tags, link_tags)
 
-                        sentences = []
-                        for phrase in phrases:
-                            # import pdb;pdb.set_trace()
-                            # [('R . Ellis', 'pers', 'Q7344037'), ('the Cambridge Journal of Philology', 'work', 'NIL'),
-                            # ('Vol . IV', 'scope', 'NIL'), ('A . Nauck', 'pers', 'NIL'), ('Leipzig', 'loc', 'NIL'), ('1856',
-                            # 'date', 'NIL')]
+                        # [('R . Ellis', 'pers', 'Q7344037', [12, 13, 14])
+                        pos_qid, pos_ner = {}, {}
+                        for entity in entities:
+                            meta = {
+                                "left_context": ' '.join(tokens[:entity[-1][0]]),
+                                "right_context": ' '.join(tokens[entity[-1][-1]+1:]),
+                                "mention": entity[0],
+                                "label_title": entity,
+                                "label": entity,
+                                "label_id": entity
+                            }
+                            paragraph = meta["left_context"] \
+                                  + " [START] " \
+                                  + meta["mention"] \
+                                  + " [END] " \
+                                  + meta["right_context"]
+                            sentences.append(paragraph)
 
-                            idx, phrase = phrase
-                            tokens, entity_tags, link_tags = phrase[0], phrase[1], phrase[-3]
-                            entities = get_entities(tokens, entity_tags, link_tags)
+                            qid, text = model.predict_paragraph(paragraph,
+                                                                 split_sentences=False,
+                                                                 split_long_texts=False)[0]
+                            for pos in entity[-1]:
+                                pos_qid[pos] = qid
+                                pos_ner[pos] = 'I-' + entity[1]
 
-                            # [('R . Ellis', 'pers', 'Q7344037', [12, 13, 14])
-                            for entity in entities:
-                                meta = {
-                                    "left_context": ' '.join(tokens[:entity[-1][0]]),
-                                    "right_context": ' '.join(tokens[entity[-1][-1]+1:]),
-                                    "mention": entity[0],
-                                    "label_title": entity,
-                                    "label": entity,
-                                    "label_id": entity
-                                }
-                                paragraph = meta["left_context"] \
-                                      + " [START_ENT] " \
-                                      + meta["mention"] \
-                                      + " [END_ENT] " \
-                                      + meta["right_context"]
-                                sentences.append(paragraph)
+                            pos_ner[entity[-1][0]] = 'B-' + entity[1]
+                        for idx, token in enumerate(tokens):
 
-                                prediction = model.predict_paragraph(paragraph, split_sentences=False)
-                                print("PARAGRAPH:", paragraph, prediction)
-                                # print(entity[2])
-                                # print('-'*20)
+                            f.write(token + '\t')
+                            if idx in pos_ner:
+                                f.write(pos_ner[idx] + '\tO\tO\tO\tO\tO\t' + pos_qid[idx] + '\tO\tO\t' + text + '\n')
+                            else:
+                                f.write('O\tO\tO\tO\tO\tO\tO\tO\tO\n')
 
-                        # results = model.sample(
-                        #     sentences,
-                        #     prefix_allowed_tokens_fn=lambda batch_id, sent: [
-                        #         e for e in trie.get(sent.tolist())
-                        #         if e < len(model.task.target_dictionary)
-                        #         # for huggingface/transformers
-                        #         # if e < len(model2.tokenizer) - 1
-                        #     ],
-                        #     text_to_id=lambda x: max(lang_title2wikidataID[tuple(reversed(x.split(" >> ")))],
-                        #                              key=lambda y: int(y[1:])),
-                        #     marginalize=True,
-                        # )
-                        # for result, phrase in zip(results, phrase):
-                        #     print(result)
+                        f.write('\n')
 
-                                # wikidataIDs = get_wikidata_ids(
-                                #     #title.replace("_", " "),
-                                #     meta['label_title'],
-                                #     lang,
-                                #     lang_title2wikidataID,
-                                #     lang_redirect2title,
-                                #     label_or_alias2wikidataID,
-                                # )[0]
-                                #
-                                # is_hard = False
-                                # item = {
-                                #     "id": "HIPE-{}-{}-{}".format(lang, filename, i),
-                                #     "input": (
-                                #         meta["left_context"]
-                                #         + " [START] "
-                                #         + meta["mention"]
-                                #         + " [END] "
-                                #         + meta["right_context"]
-                                #     ),
-                                #     "output": [{"answer": list(wikidataIDs)}],
-                                #     "meta": meta,
-                                #     "is_hard": is_hard,
-                                # }
+                # results = model.sample(
+                #     sentences,
+                #     prefix_allowed_tokens_fn=lambda batch_id, sent: [
+                #         e for e in trie.get(sent.tolist())
+                #         if e < len(model.task.target_dictionary)
+                #         # for huggingface/transformers
+                #         # if e < len(model2.tokenizer) - 1
+                #     ],
+                #     text_to_id=lambda x: max(lang_title2wikidataID[tuple(reversed(x.split(" >> ")))],
+                #                              key=lambda y: int(y[1:])),
+                #     marginalize=True,
+                # )
+                # for result, phrase in zip(results, phrase):
+                #     print(result)
+
+                        # wikidataIDs = get_wikidata_ids(
+                        #     #title.replace("_", " "),
+                        #     meta['label_title'],
+                        #     lang,
+                        #     lang_title2wikidataID,
+                        #     lang_redirect2title,
+                        #     label_or_alias2wikidataID,
+                        # )[0]
+                        #
+                        # is_hard = False
+                        # item = {
+                            #     "id": "HIPE-{}-{}-{}".format(lang, filename, i),
+                            #     "input": (
+                            #         meta["left_context"]
+                            #         + " [START] "
+                            #         + meta["mention"]
+                            #         + " [END] "
+                            #         + meta["right_context"]
+                            #     ),
+                            #     "output": [{"answer": list(wikidataIDs)}],
+                            #     "meta": meta,
+                            #     "is_hard": is_hard,
+                            # }
                                 # kilt_dataset.append(item)
                             # import pdb;
                             #
@@ -254,19 +256,19 @@ if __name__ == "__main__":
                     #         "is_hard": is_hard,
                     #     }
                     #     kilt_dataset.append(item)
-
-                    filename = os.path.join(
-                        args.output_dir, lang, "{}-kilt-{}.jsonl".format(lang, split)
-                    )
-                    logging.info("Saving {}".format(filename))
-                    with jsonlines.open(filename, "w") as f:
-                        f.write_all(kilt_dataset)
-
-                    kilt_dataset = [e for e in kilt_dataset if e["is_hard"]]
-
-                    filename = os.path.join(
-                        args.output_dir, lang, "{}-hard.jsonl".format(filename.split(".")[0])
-                    )
-                    logging.info("Saving {}".format(filename))
-                    with jsonlines.open(filename, "w") as f:
-                        f.write_all(kilt_dataset)
+                    #
+                    # filename = os.path.join(
+                    #     args.output_dir, lang, "{}-kilt-{}.jsonl".format(lang, split)
+                    # )
+                    # logging.info("Saving {}".format(filename))
+                    # with jsonlines.open(filename, "w") as f:
+                    #     f.write_all(kilt_dataset)
+                    #
+                    # kilt_dataset = [e for e in kilt_dataset if e["is_hard"]]
+                    #
+                    # filename = os.path.join(
+                    #     args.output_dir, lang, "{}-hard.jsonl".format(filename.split(".")[0])
+                    # )
+                    # logging.info("Saving {}".format(filename))
+                    # with jsonlines.open(filename, "w") as f:
+                    #     f.write_all(kilt_dataset)

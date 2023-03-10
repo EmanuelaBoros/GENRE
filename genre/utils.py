@@ -13,7 +13,7 @@ import torch
 
 from bs4 import BeautifulSoup
 
-from genre.entity_linking import (
+from entity_linking import (
     get_end_to_end_prefix_allowed_tokens_fn_fairseq,
     get_end_to_end_prefix_allowed_tokens_fn_hf,
 )

@@ -11,7 +11,7 @@ from fairseq import hub_utils
 import torch
 from fairseq.models.bart import BARTHubInterface, BARTModel
 
-from genre.utils import post_process_wikidata
+from utils import post_process_wikidata
 
 logger = logging.getLogger(__name__)
 

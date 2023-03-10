@@ -8,7 +8,7 @@ from typing import Dict, List
 
 import torch
 
-from genre.trie import DummyTrieEntity, DummyTrieMention, Trie
+from trie import DummyTrieEntity, DummyTrieMention, Trie
 
 
 def get_end_to_end_prefix_allowed_tokens_fn_hf(
