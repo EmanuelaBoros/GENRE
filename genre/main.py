@@ -16,7 +16,7 @@ import jsonlines
 import pandas
 from utils import chunk_it, get_wikidata_ids
 from tqdm.auto import tqdm, trange
-from data_utils import _read_conll, get_entities
+from data import _read_conll, get_entities
 import pickle
 # from wikidata.client import Client
 from tqdm import tqdm

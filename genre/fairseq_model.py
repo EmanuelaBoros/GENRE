@@ -98,7 +98,6 @@ class GENRE(BARTModel):
         **kwargs,
     ):
 
-
         x = hub_utils.from_pretrained(
             model_name_or_path,
             checkpoint_file,
@@ -123,7 +122,6 @@ class mGENRE(BARTModel):
         layernorm_embedding=True,
         **kwargs,
     ):
-
 
         x = hub_utils.from_pretrained(
             model_name_or_path,
