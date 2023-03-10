@@ -5,3 +5,7 @@ fairseq
 transformers
 bs4
 marisa_trie
+torch
+requests
+pytest
+bs4
