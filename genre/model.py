@@ -3,7 +3,7 @@ from typing import List, Optional
 from fairseq_model import mGENRE
 from helper_pickle import pickle_load
 from trie import Trie, MarisaTrie
-
+import torch
 
 class Model:
     def __init__(self,
@@ -142,8 +142,7 @@ class Model:
         except Exception as e:
             print('Sentence too long:', e)
             print(sentences[0])
-            result = [
-                [{"texts": "SENTENCE TOO LONG", "id": "NIL", "score": 0.0}]]
+            result = [[{"texts": ["SENTENCE TOO LONG"], "id": "NIL", "score": 0.0}]]
 
         return result
 
@@ -151,10 +150,12 @@ class Model:
         # text = self._preprocess(text)
 
         result = self._query_model(text)
-
-        text = result[0][0]["texts"][0].strip()
-        qid = result[0][0]["id"]
-        score = result[0][0]['score'].item()
+        try:
+            text = result[0][0]["texts"][0].strip()
+            qid = result[0][0]["id"]
+        except:
+            import pdb;pdb.set_trace()
+        # score = result[0][0]['score'].item()
 
         # is score ==
         return qid, text
